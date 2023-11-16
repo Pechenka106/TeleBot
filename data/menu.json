@@ -1,0 +1,51 @@
+{
+  "main_menu":
+  {
+    "params":
+    {
+      "text": "Главное меню",
+      "row_size": 1,
+      "elem_on_page": 25,
+      "is_flip": false,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": false,
+      "menu_buttons_on_one_line": true
+    },
+    "buttons":
+    {
+      "create_appointment":
+      {
+        "text": "Записаться на приём",
+        "callback_data": "create_appointment"
+      },
+      "show_appointment":
+      {
+        "text": "Посмотреть мои записи",
+        "callback_data": "show_appointment"
+      },
+      "delete_appointment":
+      {
+        "text": "Убрать запись",
+        "callback_data": "delete_appointment"
+      },
+      "show_instruction":
+      {
+        "text": "Помощь",
+        "callback_data": "show_instruction"
+      }
+    }
+  },
+  "create_appointment":
+  {
+    "params":
+    {
+      "text": "Выберите врача",
+      "row_size": 5,
+      "elem_on_page": 23,
+      "is_flip": true,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": true
+    }
+  }
+}
