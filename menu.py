@@ -2,7 +2,8 @@ import json
 import sqlite3
 
 from pprint import pprint
-from typing import Tuple, List, Any
+from datetime import *
+from typing import *
 
 from telebot.types import *
 from telebot.types import InlineKeyboardMarkup
@@ -11,46 +12,6 @@ from logger import *
 
 MAIN_MENU_BTN = InlineKeyboardButton(text="Главное меню", callback_data='start_menu')
 CLOSE_MENU_BTN = InlineKeyboardButton(text="Закрыть", callback_data='close_menu')
-NEXT_BTN = InlineKeyboardButton(text="", callback_data="")
-PREV_BTN = InlineKeyboardButton(text="", callback_data="")
-
-
-def edit_db(command: str, values: (list, tuple) = None):
-    with sqlite3.connect(path('data\\Clinic.db')) as db:
-        cur = db.cursor()
-        try:
-            if values:
-                data = cur.execute(command, values).fetchall()
-            else:
-                data = cur.execute(command).fetchall()
-            db.commit()
-        except Exception as error:
-            print(error)
-            cur.execute(f"""CREATE TABLE doctors (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
-                        last_name   TEXT    NOT NULL,
-                        first_name  TEXT    NOT NULL,
-                        middle_name TEXT,
-                        category    TEXT    NOT NULL
-                    );
-                    """)
-            cur.execute(f"""CREATE TABLE schedule (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,
-                        day        REAL    NOT NULL,
-                        time_start INTEGER NOT NULL,
-                        time_end   INTEGER NOT NULL,
-                        doctor_id  INTEGER NOT NULL,
-                        user_id    INTEGER NOT NULL
-                    );""")
-            cur.execute(f"""CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,
-                        username   TEXT    NOT NULL,
-                        first_name TEXT,
-                        last_name  TEXT,
-                        email      TEXT,
-                        phone      TEXT
-                    );
-                    """)
-            db.commit()
-            return None
-    return data
 
 
 def list_split(lst: list, n: int = 10) -> tuple[list, int]:
@@ -82,14 +43,15 @@ def create_buttons(buttons: list[InlineKeyboardButton] = None,
                    row_size: int = 3,
                    elem_on_page: int = 10,
                    is_flip: bool = False,
+                   down_button: InlineKeyboardButton = None,
                    is_close_menu_btn: bool = True,
                    is_main_menu_btn: bool = True,
                    menu_buttons_on_one_line: bool = True,
+                   call_data=None,
                    *args,
                    **kwargs
                    ) -> InlineKeyboardMarkup | None:
     n_rows = len(buttons) // row_size
-    # print(f'n_rows: {n_rows}')
     if is_flip and row_size < 3:
         raise IndexError("Can not create switch buttons \'<-\' \'->\' on one line")
     if is_main_menu_btn and is_close_menu_btn and menu_buttons_on_one_line and row_size < 2:
@@ -132,22 +94,26 @@ def create_buttons(buttons: list[InlineKeyboardButton] = None,
             btns.append(lst)
     # print(btns)
     markup = InlineKeyboardMarkup()
+    next_btn = InlineKeyboardButton(text="->", callback_data=f'{call_data}:{page + 1}')
+    prev_btn = InlineKeyboardButton(text="<-", callback_data=f'{call_data}:{page - 1}')
     if is_flip:
         lst = []
         if not (page == 0 or abs(page) == n_page):
             if len(btns[-1]) + 2 <= row_size:
-                btns[-1] = [PREV_BTN] + btns[-1][:]
+                btns[-1] = [prev_btn] + btns[-1][:]
             else:
-                lst.append(PREV_BTN)
+                lst.append(prev_btn)
         if not (page == -1 or abs(page) == n_page - 1):
             if len(btns[-1]) + 2 <= row_size:
-                btns[-1] = btns[-1][:] + [NEXT_BTN]
+                btns[-1] = btns[-1][:] + [next_btn]
             else:
-                lst.append(NEXT_BTN)
+                lst.append(next_btn)
         btns.append(lst)
     # print(btns)
     for row in btns:
         markup.row(*row)
+    if down_button:
+        markup.row(down_button)
     if is_close_menu_btn and is_main_menu_btn:
         if menu_buttons_on_one_line:
             markup.row(CLOSE_MENU_BTN, MAIN_MENU_BTN)
@@ -168,6 +134,7 @@ class Menu:
                  row_size: int = 3,
                  elem_on_page: int = 10,
                  is_flip: bool = False,
+                 down_button: InlineKeyboardButton = None,
                  is_close_menu_btn: bool = True,
                  is_main_menu_btn: bool = True,
                  menu_buttons_on_one_line: bool = True,
@@ -180,6 +147,7 @@ class Menu:
         self.row_size = row_size
         self.elem_on_page = elem_on_page
         self.is_flip = is_flip
+        self.down_button = down_button
         self.is_close_menu_btn = is_close_menu_btn
         self.is_main_menu_btn = is_main_menu_btn
         self.menu_buttons_on_one_line = menu_buttons_on_one_line
@@ -187,7 +155,7 @@ class Menu:
         self.args = args
         self.kwargs = kwargs
 
-    def render(self, page: int = 0):
+    def render(self, page: int = 0, call_data=None):
         result = {
             'reply_markup':
                 create_buttons(buttons=self.buttons,
@@ -195,9 +163,11 @@ class Menu:
                                row_size=self.row_size,
                                elem_on_page=self.elem_on_page,
                                is_flip=self.is_flip,
+                               down_button=self.down_button,
                                is_close_menu_btn=self.is_close_menu_btn,
                                is_main_menu_btn=self.is_main_menu_btn,
-                               menu_buttons_on_one_line=self.menu_buttons_on_one_line),
+                               menu_buttons_on_one_line=self.menu_buttons_on_one_line,
+                               call_data=call_data),
             **self.kwargs
         }
         if not self.media:
@@ -207,21 +177,3 @@ class Menu:
 
 with open(path('data\\menu.json'), mode='r', encoding='utf-8') as file:
     MENUS = json.load(file)
-
-Main_menu = Menu(
-    buttons=[
-        InlineKeyboardButton(text=MENUS['main_menu']['buttons'][key]['text'],
-                             callback_data=MENUS['main_menu']['buttons'][key]['callback_data'])
-        for key in MENUS['main_menu']['buttons'].keys()
-    ],
-    **MENUS['main_menu']['params']
-)
-print([text for text in edit_db(f'SELECT DISTINCT category FROM doctors ORDER BY category')])
-
-Create_appointment_menu = Menu(
-    buttons=[
-        InlineKeyboardButton(text=text[0], callback_data=f'select_{text[0]}')
-        for text in edit_db(f'SELECT DISTINCT category FROM doctors ORDER BY category')
-    ],
-    **MENUS['create_appointment']['params']
-)

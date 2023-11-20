@@ -1,4 +1,5 @@
 import os
+import sqlite3
 
 from telebot.types import *
 from datetime import datetime as dt
@@ -6,6 +7,47 @@ from pathlib import Path
 
 
 DIR_PATH = Path.cwd()
+
+
+def edit_db(command: str, values: (list, tuple) = None, create_database: bool = False):
+    with sqlite3.connect(path('data\\Clinic.db')) as db:
+        cur = db.cursor()
+        try:
+            if values:
+                data = cur.execute(command, values).fetchall()
+            else:
+                data = cur.execute(command).fetchall()
+            db.commit()
+        except Exception as error:
+            print(error)
+            if not create_database:
+                return None
+            cur.execute(f"""CREATE TABLE doctors (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
+                        last_name   TEXT    NOT NULL,
+                        first_name  TEXT    NOT NULL,
+                        middle_name TEXT,
+                        category_id INTEGER NOT NULL);""")
+            cur.execute(f"""CREATE TABLE schedule (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,
+                        year         INTEGER NOT NULL,
+                        month        INTEGER NOT NULL,
+                        day          INTEGER NOT NULL,
+                        hour_start   INTEGER NOT NULL,
+                        minute_start INTEGER NOT NULL,
+                        hour_end     INTEGER NOT NULL,
+                        minute_end   INTEGER NOT NULL,
+                        doctor_id    INTEGER NOT NULL,
+                        user_id      INTEGER);""")
+            cur.execute(f"""CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,
+                        username   TEXT    NOT NULL,
+                        first_name TEXT,
+                        last_name  TEXT,
+                        email      TEXT,
+                        phone      TEXT);""")
+            cur.execute(f"""CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,
+                        title TEXT UNIQUE NOT NULL);""")
+            db.commit()
+            return None
+    return data
 
 
 def path(path_file: str = 'log.txt') -> str:

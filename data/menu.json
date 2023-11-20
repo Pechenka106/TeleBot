@@ -40,8 +40,86 @@
     "params":
     {
       "text": "Выберите врача",
-      "row_size": 5,
-      "elem_on_page": 23,
+      "row_size": 3,
+      "elem_on_page": 10,
+      "is_flip": true,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": true
+    }
+  },
+  "select_doctor_menu":
+  {
+    "params":
+    {
+      "text": "Выберите врача",
+      "row_size": 3,
+      "elem_on_page": 10,
+      "is_flip": true,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": true
+    }
+  },
+  "select_year_menu":
+  {
+    "params":
+    {
+      "text": "Выберите год",
+      "row_size": 1,
+      "elem_on_page": 2,
+      "is_flip": false,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": false
+    }
+  },
+  "select_month_menu":
+  {
+    "params":
+    {
+      "text": "Выберите месяц",
+      "row_size": 4,
+      "elem_on_page": 12,
+      "is_flip": false,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": true
+    }
+  },
+  "select_day_menu":
+  {
+    "params":
+    {
+      "text": "Выберите день",
+      "row_size": 7,
+      "elem_on_page": 49,
+      "is_flip": false,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": true
+    }
+  },
+  "select_time_menu":
+  {
+    "params":
+    {
+      "text": "Выберите время",
+      "row_size": 3,
+      "elem_on_page": 3,
+      "is_flip": true,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": true
+    }
+  },
+  "show_appointment":
+  {
+    "params" :
+    {
+      "text": "Ваши записи на приём:",
+      "row_size": 2,
+      "elem_on_page": 10,
       "is_flip": true,
       "is_close_menu_btn": true,
       "is_main_menu_btn": true,
