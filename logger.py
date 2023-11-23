@@ -1,16 +1,33 @@
-import os
 import sqlite3
 
 from telebot.types import *
 from datetime import datetime as dt
 from pathlib import Path
+import time as tm
+from typing import *
 
 
 DIR_PATH = Path.cwd()
 
 
-def edit_db(command: str, values: (list, tuple) = None, create_database: bool = False):
-    with sqlite3.connect(path('data\\Clinic.db')) as db:
+def show_time_complete(func):
+    def decorated(*args, **kwargs):
+        start_time = tm.time()
+        func(*args, **kwargs)
+        end_time = tm.time()
+        print(f'function {func.__name__} completed in {end_time - start_time} second')
+    return decorated
+
+
+def path(path_file: str = 'log.txt') -> str:
+    return str(Path(DIR_PATH, path_file))
+
+
+def edit_db(command: str,
+            values: tuple | list = None,
+            create_database: bool = False,
+            path_to_database: str = path('data\\Clinic.db')):
+    with sqlite3.connect(path_to_database) as db:
         cur = db.cursor()
         try:
             if values:
@@ -19,7 +36,7 @@ def edit_db(command: str, values: (list, tuple) = None, create_database: bool = 
                 data = cur.execute(command).fetchall()
             db.commit()
         except Exception as error:
-            print(error)
+            print(command + '\n' + str(error))
             if not create_database:
                 return None
             cur.execute(f"""CREATE TABLE doctors (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
@@ -50,10 +67,6 @@ def edit_db(command: str, values: (list, tuple) = None, create_database: bool = 
     return data
 
 
-def path(path_file: str = 'log.txt') -> str:
-    return str(Path(DIR_PATH, path_file))
-
-
 def start_writing_log():
     if not os.path.isfile(path()):
         new_log = open(path(), mode='w', encoding='utf-8')
@@ -74,14 +87,19 @@ def start_writing_log():
           file=open(path('log.txt'), mode='a+', encoding='utf-8'))
 
 
-def write_log(user: User, message: str = 'DEBUG', only_str: bool = False):
+def write_log(user: User,
+              message: str = 'DEBUG',
+              only_str: bool = False,
+              sep: str = '\n'):
     if only_str:
-        print(f'{dt.now()}: {message}\n', file=open(path()))
-        print(f'{dt.now()}: {message}\n')
+        print(f'{dt.now()}: {message}{sep}', file=open(path()))
+        print(f'{dt.now()}: {message}{sep}')
         return
-    print(f'{dt.now()}: Пользователь - {user.username}:{user.id}({user.first_name} {user.last_name}) *** {message}\n')
-    print(f'{dt.now()}: Пользователь - {user.username}:{user.id}({user.first_name} {user.last_name}) *** {message}\n',
-          file=open(path()))
+    print(f'{dt.now()}: Пользователь - {user.username}: {user.id} '
+          f'({user.first_name} {user.last_name}) *** {message}{sep}')
+    print(f'{dt.now()}: Пользователь - {user.username}: {user.id} '
+          f'({user.first_name} {user.last_name}) *** {message}{sep}',
+          file=open(path(), mode='a+', encoding='utf-8'))
 
 
 def stop_writing_log():

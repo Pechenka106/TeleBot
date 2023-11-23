@@ -11,23 +11,32 @@
       "is_main_menu_btn": false,
       "menu_buttons_on_one_line": true
     },
+
+
     "buttons":
     {
+
       "create_appointment":
       {
         "text": "Записаться на приём",
-        "callback_data": "create_appointment"
+        "callback_data": "create_appointment_menu"
       },
+
+
       "show_appointment":
       {
         "text": "Посмотреть мои записи",
-        "callback_data": "show_appointment"
+        "callback_data": "show_appointment_menu:0"
       },
+
+
       "delete_appointment":
       {
         "text": "Убрать запись",
-        "callback_data": "delete_appointment"
+        "callback_data": "delete_appointment_menu:0"
       },
+
+
       "show_instruction":
       {
         "text": "Помощь",
@@ -35,11 +44,13 @@
       }
     }
   },
-  "create_appointment":
+
+
+  "create_appointment_menu":
   {
     "params":
     {
-      "text": "Выберите врача",
+      "text": "Выберите врача:",
       "row_size": 3,
       "elem_on_page": 10,
       "is_flip": true,
@@ -48,11 +59,13 @@
       "menu_buttons_on_one_line": true
     }
   },
+
+
   "select_doctor_menu":
   {
     "params":
     {
-      "text": "Выберите врача",
+      "text": "Выберите врача:",
       "row_size": 3,
       "elem_on_page": 10,
       "is_flip": true,
@@ -61,11 +74,13 @@
       "menu_buttons_on_one_line": true
     }
   },
+
+
   "select_year_menu":
   {
     "params":
     {
-      "text": "Выберите год",
+      "text": "Выберите год:",
       "row_size": 1,
       "elem_on_page": 2,
       "is_flip": false,
@@ -74,11 +89,13 @@
       "menu_buttons_on_one_line": false
     }
   },
+
+
   "select_month_menu":
   {
     "params":
     {
-      "text": "Выберите месяц",
+      "text": "Выберите месяц:",
       "row_size": 4,
       "elem_on_page": 12,
       "is_flip": false,
@@ -87,11 +104,13 @@
       "menu_buttons_on_one_line": true
     }
   },
+
+
   "select_day_menu":
   {
     "params":
     {
-      "text": "Выберите день",
+      "text": "Выберите день:",
       "row_size": 7,
       "elem_on_page": 49,
       "is_flip": false,
@@ -100,25 +119,44 @@
       "menu_buttons_on_one_line": true
     }
   },
+
+
   "select_time_menu":
   {
     "params":
     {
-      "text": "Выберите время",
-      "row_size": 3,
-      "elem_on_page": 3,
+      "text": "Выберите время:",
+      "row_size": 2,
+      "elem_on_page": 2,
       "is_flip": true,
       "is_close_menu_btn": true,
       "is_main_menu_btn": true,
       "menu_buttons_on_one_line": true
     }
   },
-  "show_appointment":
+
+
+  "show_appointment_menu":
   {
     "params" :
     {
       "text": "Ваши записи на приём:",
-      "row_size": 2,
+      "row_size": 3,
+      "elem_on_page": 10,
+      "is_flip": true,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": true
+    }
+  },
+
+
+  "delete_appointment_menu":
+  {
+    "params" :
+    {
+      "text": "Выберите какую запись хотите удалить:",
+      "row_size": 3,
       "elem_on_page": 10,
       "is_flip": true,
       "is_close_menu_btn": true,

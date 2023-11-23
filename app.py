@@ -1,13 +1,8 @@
-import datetime
-
 import telebot
-import os
 
 from datetime import *
-from telegram_bot_calendar import DetailedTelegramCalendar, LSTEP
 from calendar import monthrange
 
-from logger import *
 from menu import *
 
 
@@ -16,7 +11,7 @@ class TokenError(Exception):
 
 
 COMMANDS = {
-
+    '/menu': 'Главное меню'
 }
 
 CRUTCH = {
@@ -49,13 +44,6 @@ MONTH = {
     12: ('дек', 'декабрь')
 }
 
-# Show_appointment_menu = Menu(
-#     buttons=[
-#         InlineKeyboardButton(text=text, callback_data=f'')
-#         for text in edit_db(f'SELECT day, time_start, time_end, (SELECT category) FROM')
-#     ]
-# )
-
 
 if not os.path.isfile(path('token.txt')):
     raise TokenError(f"Token for bot not found in: \"{path('token.txt')}\"")
@@ -82,7 +70,7 @@ def create_data_button(lst: list[tuple[int, date, time, time, int, int]]) -> dic
     return free_days
 
 
-@bot.message_handler(commands=['help'])
+@bot.message_handler(commands=['menu', 'start', 'main_nemu'])
 def show_command(msg, repeat: bool = False):
     main_menu__ = Menu(
         buttons=[
@@ -116,19 +104,23 @@ def close_menu(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('create_appointment'))
+@bot.callback_query_handler(func=lambda call: call.data.startswith('create_appointment_menu'))
 def select_category_of_doctor(call):
     data = edit_db(f'SELECT * FROM categories')
     if not data:
         bot.answer_callback_query(callback_query_id=call.id,
                                   text=f'К сожалению, у нас отсутствуют врачи в настоящее время')
         return
+    if not edit_db(f"SELECT * FROM schedule WHERE user_id IS NULL OR user_id=''"):
+        bot.answer_callback_query(callback_query_id=call.id,
+                                  text=f'К сожалению все места заняты')
+        return
     create_appointment_menu = Menu(
         buttons=[
             InlineKeyboardButton(text=elem[1], callback_data=f'selected_category:{elem[0]}')
             for elem in data
         ],
-        **MENUS['create_appointment']['params']
+        **MENUS['create_appointment_menu']['params']
     )
     bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.id, **create_appointment_menu.render())
 
@@ -136,6 +128,12 @@ def select_category_of_doctor(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_category:'))
 def select_doctor(call):
     category_id = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]][0]
+    if not edit_db(f"SELECT year, month, day FROM schedule, doctors WHERE doctors.id=schedule.doctor_id AND "
+                   f"doctors.category_id={category_id} AND schedule.user_id IS NULL"):
+        bot.answer_callback_query(callback_query_id=call.id,
+                                  text=f'К сожалению, у нас отсутствуют свободные места у '
+                                       f'{edit_db(f"SELECT title FROM categories WHERE id={category_id}")[0][0]}')
+        return
     data = edit_db(f"SELECT id, last_name FROM doctors WHERE category_id={category_id}")
     if not data:
         bot.answer_callback_query(callback_query_id=call.id,
@@ -156,12 +154,16 @@ def select_doctor(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_doctor:'))
 def select_year(call):
     doctor_id = int(call.data.split(':')[1])
+    data = edit_db(f"""SELECT DISTINCT year FROM schedule WHERE user_id IS NULL AND doctor_id={doctor_id}""")
+    if len(data) == 1:
+        call.data = f'selected_year:{doctor_id}:{data[0][0]}'
+        select_month(call)
+        return
     select_year_menu = Menu(
         buttons=[
             InlineKeyboardButton(text=f'20{elem[0]}',
                                  callback_data=f'selected_year:{doctor_id}:{elem[0]}')
-            for elem in edit_db(f"""SELECT DISTINCT year FROM schedule WHERE 
-            doctor_id={doctor_id} AND user_id IS NULL""")
+            for elem in data
         ],
         **MENUS['select_year_menu']['params']
     )
@@ -174,7 +176,7 @@ def select_month(call):
     btns = []
     months = [i[0] for i in
               edit_db(f"""SELECT DISTINCT month FROM schedule WHERE 
-              doctor_id={doctor_id} AND year={year} AND user_id IS NULL""")]
+              user_id IS NULL AND year={year} AND doctor_id={doctor_id}""")]
     for month in range(1, 13):
         if month in months:
             btns.append(
@@ -194,7 +196,7 @@ def select_day(call):
     doctor_id, year, month = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]]
     pass_btn = InlineKeyboardButton(text=' ', callback_data='pass')
     days = [i[0] for i in edit_db(f"SELECT DISTINCT day FROM schedule WHERE "
-                                  f"doctor_id={doctor_id} AND year={year} AND month={month} AND user_id IS NULL")]
+                                  f"user_id IS NULL AND year={year} AND month={month} AND doctor_id={doctor_id}")]
     btns = [InlineKeyboardButton(text=WEEKDAY[index][0], callback_data='pass') for index in range(7)]
     btns += [pass_btn for _ in range(date(year=year, month=month, day=min(days)).weekday())]
     for day in range(monthrange(year, month)[1]):
@@ -224,11 +226,12 @@ def select_time(call):
                                        for i in call.data.split(':')[1:]]
     times = [(time(int(elem[0]), int(elem[1])), time(int(elem[2]), int(elem[3])), int(elem[4]))
              for elem in edit_db(f"SELECT hour_start, minute_start, hour_end, minute_end, id FROM schedule WHERE "
-                                 f"doctor_id={doctor_id} AND year={year} AND month={month} AND day={day} "
-                                 f"AND user_id IS NULL")]
+                                 f"user_id IS NULL AND year={year} AND month={month} AND day={day} "
+                                 f"AND doctor_id={doctor_id}")]
     select_time_menu = Menu(
         buttons=[
-            InlineKeyboardButton(text=f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')}", callback_data='pass')
+            InlineKeyboardButton(text=f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')}",
+                                 callback_data=f'selected_time:{doctor_id}:{year}:{month}:{day}:{cell_id}')
             for start, end, cell_id in times
         ],
         **MENUS['select_time_menu']['params']
@@ -239,11 +242,140 @@ def select_time(call):
                                                  str(year), str(month), str(day)])))
 
 
+def put_user_phone(msg, cell_id):
+    phone = msg.text
+    email = None
+    edit_db(f"""INSERT INTO users (id, username, first_name, last_name, email, phone) VALUES (?, ?, ?, ?, ?, ?)""",
+            values=(msg.from_user.id, msg.from_user.username, msg.from_user.first_name, msg.from_user.last_name, email,
+                    phone))
+    write_log(msg.from_user, f'зарегистрировался в базе данных')
+    edit_db(f"""UPDATE schedule SET user_id={msg.from_user.id} WHERE id={cell_id}""")
+    markup = ReplyKeyboardRemove()
+    data = [int(i) if str(i).isnumeric() else str(i) for i in
+            edit_db(f"""SELECT title, last_name, first_name, middle_name, year, month, day, hour_start, minute_start, 
+            hour_end, minute_end FROM categories, doctors, schedule WHERE categories.id=doctors.category_id 
+            AND doctors.id=schedule.doctor_id AND schedule.id={cell_id}""")[0]]
+    text = f"{data[0]} - {' '.join([data[1], data[2], data[3]])} на "\
+           f"{date(data[4] + 2000, data[5], data[6])} в {time(data[7], data[8]).strftime('%H:%M')}-"\
+           f"{time(data[9], data[10]).strftime('%H:%M')}"
+    bot.send_message(msg.chat.id, f"Вы успешно записались к {text}",
+                     reply_markup=markup)
+    write_log(msg.from_user, f'записался к {text}')
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_time:'))
 def accept_appointment(call):
-    pass
+    cell_id = int(call.data.split(':')[-1])
+    user = edit_db(f"""SELECT id FROM users WHERE id={call.from_user.id}""")
+    bot.delete_message(call.message.chat.id, call.message.id)
+    if not user:
+        markup = ReplyKeyboardMarkup()
+        markup.add(KeyboardButton(text='Поделиться номером телефона', request_contact=True))
+        msg = bot.send_message(text='Отправьте номер телефона чтобы записаться на прием',
+                               chat_id=call.message.chat.id, reply_markup=markup)
+        bot.register_next_step_handler(msg, put_user_phone, cell_id)
+        return
+    edit_db(f"""UPDATE schedule SET user_id={call.from_user.id} WHERE id={cell_id}""")
+    markup = ReplyKeyboardRemove()
+    data = [int(i) if str(i).isnumeric() else str(i) for i in
+            edit_db(f"""SELECT title, last_name, first_name, middle_name, year, month, day, hour_start, minute_start, 
+            hour_end, minute_end FROM categories, doctors, schedule WHERE categories.id=doctors.category_id 
+            AND doctors.id=schedule.doctor_id AND schedule.id={cell_id}""")[0]]
+    text = f"{data[0]} - {' '.join([data[1], data[2], data[3]])} на "\
+           f"{date(data[4] + 2000, data[5], data[6])} в {time(data[7], data[8]).strftime('%H:%M')}-"\
+           f"{time(data[9], data[10]).strftime('%H:%M')}"
+    bot.send_message(call.message.chat.id,
+                     f"Вы успешно записались к {text}",
+                     reply_markup=markup)
+    write_log(call.from_user, f'записался к {text}')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('show_appointment_menu:'))
+def show_appointment_menu(call):
+    page = int(call.data.split(':')[1])
+    appointments = [[int(i) if str(i).isnumeric() else str(i) for i in appointment] for appointment in
+                    edit_db(f"SELECT schedule.id, title, last_name, first_name, middle_name, year, month, day,"
+                            f"hour_start, minute_start, hour_end, minute_end FROM categories, doctors, schedule "
+                            f"WHERE doctors.category_id=categories.id AND doctors.id=schedule.doctor_id "
+                            f"AND schedule.user_id={call.from_user.id}")]
+    appointment_menu = Menu(
+        buttons=[
+            InlineKeyboardButton(
+                text=f"{elem[7]} {MONTH[elem[6]][1].capitalize()} {time(elem[8], elem[9]).strftime('%H:%M')}-"
+                     f"{time(elem[10], elem[11]).strftime('%H:%M')}",
+                callback_data=f"show_appointment:{elem[0]}")
+            for elem in appointments
+        ],
+        **MENUS['show_appointment_menu']['params']
+    )
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.id,
+                          **appointment_menu.render(page, ':'.join(['show_appointment_menu', ''])))
+    write_log(call.from_user, f'Посмотрел свои записи')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('show_appointment:'))
+def show_appointment(call):
+    appointment_id = int(call.data.split(':')[1])
+    apt = [int(i) if str(i).isnumeric() else str(i) for i in
+           edit_db(f"SELECT title, doctors.last_name, doctors.last_name, doctors.middle_name, year, month, day, "
+                   f"hour_start, minute_start, hour_end, minute_end, schedule.id, users.id "
+                   f"FROM categories, doctors, schedule, users WHERE doctors.category_id=categories.id "
+                   f"AND doctors.id=schedule.doctor_id "
+                   f"AND users.id=schedule.user_id AND schedule.id={appointment_id}")[0]]
+    bot.answer_callback_query(callback_query_id=call.id,
+                              text=f"Вы записаны к {apt[0]} - {' '.join((apt[1], apt[2], apt[3]))} на "
+                                   f"{MONTH[apt[5]][0].capitalize()} {apt[6]} в "
+                                   f"{time(apt[7], apt[8]).strftime('%H:%M')}-"
+                                   f"{time(apt[9], apt[10]).strftime('%H:%M')}\n"
+                                   f"Ваш номерок на прием: {apt[11]}-{apt[12]}",
+                              show_alert=True)
+    write_log(call.deom_user, f'Посмотрел свою запись с id {appointment_id}')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('delete_appointment_menu:'))
+def show_delete_appointment_menu(call):
+    page = int(call.data.split(':')[1])
+    appointments = [[int(i) if str(i).isnumeric() else str(i) for i in appointment] for appointment in
+                    edit_db(f"SELECT schedule.id, title, last_name, first_name, middle_name, year, month, day,"
+                            f"hour_start, minute_start, hour_end, minute_end FROM categories, doctors, schedule "
+                            f"WHERE doctors.category_id=categories.id AND doctors.id=schedule.doctor_id "
+                            f"AND schedule.user_id={call.from_user.id}")]
+    appointment_menu = Menu(
+        buttons=[
+            InlineKeyboardButton(
+                text=f"{elem[7]} {MONTH[elem[6]][0].capitalize()} {time(elem[8], elem[9]).strftime('%H:%M')}-"
+                     f"{time(elem[10], elem[11]).strftime('%H:%M')}",
+                callback_data=f"delete_appointment:{elem[0]}")
+            for elem in appointments
+        ],
+        **MENUS['delete_appointment_menu']['params']
+    )
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.id,
+                          **appointment_menu.render(page, ':'.join(['delete_appointment_menu', ''])))
+    write_log(call.from_user, f'Посмотрел свои записи чтобы удалить')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('delete_appointment:'))
+def show_appointment(call):
+    appointment_id = int(call.data.split(':')[1])
+    apt = [int(i) if str(i).isnumeric() else str(i) for i in
+           edit_db(f"SELECT title, doctors.last_name, doctors.last_name, doctors.middle_name, year, month, day, "
+                   f"hour_start, minute_start, hour_end, minute_end, schedule.id, users.id "
+                   f"FROM categories, doctors, schedule, users WHERE doctors.category_id=categories.id "
+                   f"AND doctors.id=schedule.doctor_id "
+                   f"AND users.id=schedule.user_id AND schedule.id={appointment_id}")[0]]
+    edit_db(f"UPDATE schedule SET user_id=? WHERE id={appointment_id}", [None])
+    bot.answer_callback_query(callback_query_id=call.id,
+                              text=f"Вы убрали запись к {apt[0]} - {' '.join((apt[1], apt[2], apt[3]))} на "
+                                   f"{MONTH[apt[5]][1].capitalize()} {apt[6]} в "
+                                   f"{time(apt[7], apt[8]).strftime('%H:%M')}-"
+                                   f"{time(apt[9], apt[10]).strftime('%H:%M')}",
+                              show_alert=True)
+    write_log(call.from_user, f'Убрал запись с id {appointment_id}')
+    call.data = 'delete_appointment_menu:0'
+    show_delete_appointment_menu(call)
 
 
 start_writing_log()
-bot.infinity_polling()
+bot.polling(none_stop=True)
 stop_writing_log()

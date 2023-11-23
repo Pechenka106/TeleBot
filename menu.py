@@ -1,41 +1,22 @@
-import json
-import sqlite3
-
-from pprint import pprint
-from datetime import *
-from typing import *
-
-from telebot.types import *
-from telebot.types import InlineKeyboardMarkup
-
 from logger import *
 
 MAIN_MENU_BTN = InlineKeyboardButton(text="Главное меню", callback_data='start_menu')
 CLOSE_MENU_BTN = InlineKeyboardButton(text="Закрыть", callback_data='close_menu')
 
 
-def list_split(lst: list, n: int = 10) -> tuple[list, int]:
-    if n == 1:
-        return [[i] for i in lst], len(lst)
-    result = []
-    # print(f'result - {result}')
-    for i in range(len(lst) // n - 1):
-        result.append(lst[i * n:(i + 1) * n + 1])
-    # print(f'result - {result}')
-    if not len(lst) % n:
-        result.append(lst[len(lst) // n: -1])
-    else:
-        result.append(lst[(len(lst) // n - 1) * n:(len(lst) // n) * n])
-    # print(f'result - {result}')
-    if len(lst) % n == 1:
-        result.append([lst[-1]])
-    elif len(lst) % n:
-        result.append(lst[(len(lst) // n) * n: -1] + [lst[-1]])
-    # print(f'result - {result}')
-    result = [i for i in result if i]
-    n_page = len(result)
-    # print(f'result - {result}')
-    return result, n_page
+def list_split(lst: list, n: int = 10) -> tuple[list[list[InlineKeyboardButton]], int]:
+    count = n
+    result, spis = [], []
+    for elem in lst:
+        spis.append(elem)
+        count -= 1
+        if count == 0:
+            result.append(spis[:])
+            spis.clear()
+            count = n
+    if spis:
+        result.append(spis)
+    return result, len(result)
 
 
 def create_buttons(buttons: list[InlineKeyboardButton] = None,
@@ -52,7 +33,7 @@ def create_buttons(buttons: list[InlineKeyboardButton] = None,
                    **kwargs
                    ) -> InlineKeyboardMarkup | None:
     n_rows = len(buttons) // row_size
-    if is_flip and row_size < 3:
+    if is_flip and row_size < 2:
         raise IndexError("Can not create switch buttons \'<-\' \'->\' on one line")
     if is_main_menu_btn and is_close_menu_btn and menu_buttons_on_one_line and row_size < 2:
         raise IndexError("Can not create \"Close_menu\" and \"Main menu\" buttons on one line")
