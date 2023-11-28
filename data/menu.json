@@ -32,7 +32,7 @@
 
       "delete_appointment":
       {
-        "text": "Убрать запись",
+        "text": "Отменить запись",
         "callback_data": "delete_appointment_menu:0"
       },
 
@@ -126,8 +126,8 @@
     "params":
     {
       "text": "Выберите время:",
-      "row_size": 2,
-      "elem_on_page": 2,
+      "row_size": 3,
+      "elem_on_page": 10,
       "is_flip": true,
       "is_close_menu_btn": true,
       "is_main_menu_btn": true,
@@ -159,6 +159,34 @@
       "row_size": 3,
       "elem_on_page": 10,
       "is_flip": true,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": true
+    }
+  },
+
+
+  "show_instruction":
+  {
+    "params":
+    {
+      "row_size": 2,
+      "elem_on_page": 2,
+      "is_flip": false,
+      "is_close_menu_btn": true,
+      "is_main_menu_btn": true,
+      "menu_buttons_on_one_line": true
+    }
+  },
+
+
+  "welcome":
+  {
+    "params":
+    {
+      "row_size": 2,
+      "elem_on_page": 2,
+      "is_flip": false,
       "is_close_menu_btn": true,
       "is_main_menu_btn": true,
       "menu_buttons_on_one_line": true

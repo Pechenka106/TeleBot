@@ -32,6 +32,16 @@ def create_buttons(buttons: list[InlineKeyboardButton] = None,
                    *args,
                    **kwargs
                    ) -> InlineKeyboardMarkup | None:
+    if not buttons:
+        markup = InlineKeyboardMarkup()
+        if is_close_menu_btn and is_main_menu_btn and menu_buttons_on_one_line:
+            markup.row(CLOSE_MENU_BTN, MAIN_MENU_BTN)
+            return markup
+        if is_close_menu_btn:
+            markup.row(CLOSE_MENU_BTN)
+        if is_main_menu_btn:
+            markup.row(MAIN_MENU_BTN)
+        return markup
     n_rows = len(buttons) // row_size
     if is_flip and row_size < 2:
         raise IndexError("Can not create switch buttons \'<-\' \'->\' on one line")
@@ -45,8 +55,6 @@ def create_buttons(buttons: list[InlineKeyboardButton] = None,
         raise Exception('Кол-во столбцов не может быть меньше 1')
     if elem_on_page < row_size:
         raise Exception('Размер ряда не может превышать размер страницы')
-    if not buttons:
-        return buttons
     # print(f'n_rows: {n_rows}')
     # print(buttons)
     if is_flip:
@@ -111,7 +119,7 @@ def create_buttons(buttons: list[InlineKeyboardButton] = None,
 class Menu:
     def __init__(self,
                  text: str = '',
-                 buttons: list[InlineKeyboardButton] = None,
+                 buttons=None,
                  row_size: int = 3,
                  elem_on_page: int = 10,
                  is_flip: bool = False,
@@ -123,6 +131,8 @@ class Menu:
                  *args,
                  **kwargs
                  ):
+        if buttons is None:
+            buttons = []
         self.text = text
         self.buttons = buttons
         self.row_size = row_size
