@@ -1,8 +1,10 @@
 import telebot
 import traceback
 
+from sys import argv
 from datetime import *
 from calendar import monthrange
+from telebot.apihelper import ApiTelegramException as telebot_error
 
 from menu import *
 
@@ -30,7 +32,7 @@ WEEKDAY = {
     3: ('чт', 'четверг'),
     4: ('пт', 'пятница'),
     5: ('сб', 'суббота'),
-    6: ('вс', 'Воскресенье')
+    6: ('вс', 'воскресенье')
 }
 MONTH = {
     1: ('янв', 'январь'),
@@ -46,12 +48,21 @@ MONTH = {
     11: ('ноя', 'ноябрь'),
     12: ('дек', 'декабрь')
 }
+ALWAYS_RESTART = False
+TOKEN_PATH = path('token.txt')
 
 
 def main():
-    if not os.path.isfile(path('token.txt')):
-        raise TokenError(f"Token for bot not found in: \"{path('token.txt')}\"")
-    bot = telebot.TeleBot(open(path('token.txt'), 'r', encoding='utf-8').readline(), parse_mode='html')
+    args = argv
+    global TOKEN_PATH
+    global ALWAYS_RESTART
+    if len(args) > 1:
+        TOKEN_PATH = args[1].lstrip('token_path=')
+    if len(args) > 2:
+        ALWAYS_RESTART = bool(args[2].lstrip('restart='))
+    if not os.path.isfile(TOKEN_PATH):
+        raise TokenError(f"Token for bot not found in: \"{TOKEN_PATH}\"")
+    bot = telebot.TeleBot(open(TOKEN_PATH, 'r', encoding='utf-8').readline(), parse_mode='html')
     bot.set_my_commands([BotCommand(key[1:], COMMANDS[key]) for key in COMMANDS.keys()])
 
     def create_data_button(lst: list[tuple[int, date, time, time, int, int]]) -> dict[date: tuple[time, time]]:
@@ -80,7 +91,8 @@ def main():
             username = msg.from_user.first_name
         start_menu = Menu(**MENUS['welcome']['params'],
                           text=f'Привет <b>{username}</b>!\n'
-                               f'Записаться на примем ты можешь через главное меню по кнопке внизу')
+                               f'Записаться на примем ты можешь через главное меню по кнопке внизу либо написав '
+                               f'команду - /menu')
         if msg:
             bot.send_message(msg.chat.id, **start_menu.render())
             write_log(msg.from_user, f'Вызвал приветствие')
@@ -134,38 +146,46 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('close_menu'))
     def close_menu(call):
-        bot.delete_message(call.message.chat.id, call.message.id)
-        write_log(call.from_user, f'Закрыл меню с помощью кнопки \"Закрыть\"')
+        try:
+            bot.delete_message(call.message.chat.id, call.message.id)
+            write_log(call.from_user, f'Закрыл меню с помощью кнопки \"Закрыть\"')
+        except telebot_error as error:
+            bot.answer_callback_query(callback_query_id=call.id)
+            write_log(call.from_user, f'Невозможно закрыть меню с помощью кнопки \"Закрыть\"\n{error}"')
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('create_appointment_menu'))
     def select_category_of_doctor(call):
+        page = int(call.data.split(':')[1])
+        now = dt.now()
         data = edit_db(f'SELECT * FROM categories')
         if not data:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению, у нас отсутствуют врачи в настоящее время')
             write_log(call.from_user, f'Пытался записаться на прием, но не было найдено врачей в клинике')
             return
-        if not edit_db(f"SELECT * FROM schedule WHERE user_id IS NULL OR user_id=''"):
+        if not [i for i in
+                edit_db(f"SELECT * FROM schedule WHERE user_id IS NULL")]:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению все места заняты')
             write_log(call.from_user, f'Пытался записаться на прием, но все места были заняты')
             return
         create_appointment_menu = Menu(
             buttons=[
-                InlineKeyboardButton(text=elem[1], callback_data=f'selected_category:{elem[0]}')
+                InlineKeyboardButton(text=elem[1], callback_data=f'selected_category:{elem[0]}:0')
                 for elem in data
             ],
-            **MENUS['create_appointment_menu']['params']
+            **MENUS['create_appointment_menu']['params'],
         )
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.id,
-                              **create_appointment_menu.render())
+                              **create_appointment_menu.render(page=page, call_data='create_appointment_menu'))
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_category:'))
     def select_doctor(call):
-        category_id = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]][0]
+        now = dt.now()
+        category_id, page = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]]
         category = edit_db(f"SELECT title FROM categories WHERE id={category_id}")[0][0]
-        if not edit_db(f"SELECT year, month, day FROM schedule, doctors WHERE doctors.id=schedule.doctor_id AND "
-                       f"doctors.category_id={category_id} AND schedule.user_id IS NULL"):
+        if not edit_db(f"SELECT DISTINCT * FROM schedule, doctors WHERE user_id IS NULL "
+                       f"AND schedule.doctor_id=doctors.id AND doctors.category_id={category_id}"):
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению, у нас отсутствуют свободные места у '
                                            f'{category}')
@@ -182,40 +202,57 @@ def main():
         select_doctor_menu = Menu(
             buttons=[
                 InlineKeyboardButton(text=elem[1].lower().capitalize(),
-                                     callback_data=f'selected_doctor:{elem[0]}')
+                                     callback_data=f'selected_doctor:{elem[0]}:0')
                 for elem in data
             ],
             **MENUS['select_doctor_menu']['params']
         )
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.id, **select_doctor_menu.render())
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.id,
+                              **select_doctor_menu.render(page=page, call_data='selected_category'))
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_doctor:'))
     def select_year(call):
-        doctor_id = int(call.data.split(':')[1])
-        data = edit_db(f"""SELECT DISTINCT year FROM schedule WHERE user_id IS NULL AND doctor_id={doctor_id}""")
-        if len(data) == 1:
-            call.data = f'selected_year:{doctor_id}:{data[0][0]}'
+        now = dt.now()
+        doctor_id, page = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]]
+        years = [i[0] for i in
+                 edit_db(f"SELECT DISTINCT year FROM schedule WHERE user_id IS NULL AND doctor_id={doctor_id}")]
+        doctor = edit_db(f"SELECT categories.title, doctors.last_name, doctors.first_name FROM doctors, categories "
+                         f"WHERE doctors.id={doctor_id} AND categories.id=doctors.category_id")[0]
+        if not years:
+            bot.answer_callback_query(callback_query_id=call.id,
+                                      text=f'К сожалению все места к {doctor[0]}: {doctor[1]} {doctor[2]} уже заняты')
+            main_menu(call)
+        if len(years) == 1:
+            call.data = f'selected_year:{doctor_id}:{years[0]}'
             select_month(call)
             return
         select_year_menu = Menu(
             buttons=[
-                InlineKeyboardButton(text=f'20{elem[0]}',
-                                     callback_data=f'selected_year:{doctor_id}:{elem[0]}')
-                for elem in data
+                InlineKeyboardButton(text=f'20{elem}',
+                                     callback_data=f'selected_year:{doctor_id}:{elem}')
+                for elem in years
             ],
             **MENUS['select_year_menu']['params']
         )
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.id, **select_year_menu.render())
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.id,
+                              **select_year_menu.render(
+                                  page=page, call_data=':'.join([str(i) for i in ('selected_doctor', doctor_id)])))
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_year:'))
     def select_month(call):
+        now = dt.now()
         doctor_id, year = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]]
         btns = []
         months = [i[0] for i in
-                  edit_db(f"""SELECT DISTINCT month FROM schedule WHERE 
-                  user_id IS NULL AND year={year} AND doctor_id={doctor_id}""")]
+                  edit_db(f"SELECT DISTINCT month FROM schedule WHERE user_id IS NULL AND doctor_id={doctor_id} "
+                          f"AND year={year}")]
+        if not months:
+            bot.answer_callback_query(callback_query_id=call.id,
+                                      text=f'К сожалению все места на {2000 + year} год заняты')
+            call.data = ':'.join([doctor_id])
+            select_year(call)
         for month in range(1, 13):
-            if month in months:
+            if month in months and month >= dt.now().month:
                 btns.append(
                     InlineKeyboardButton(text=f'{MONTH[month][0]}',
                                          callback_data=f'selected_month:{doctor_id}:{year}:{month}'))
@@ -229,21 +266,27 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_month:'))
     def select_day(call):
+        now = dt.now()
         doctor_id, year, month = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]]
         pass_btn = InlineKeyboardButton(text=' ', callback_data='pass')
-        days = [i[0] for i in edit_db(f"SELECT DISTINCT day FROM schedule WHERE "
-                                      f"user_id IS NULL AND year={year} AND month={month} AND doctor_id={doctor_id}")]
+        days = [i[0] for i in edit_db(f"SELECT DISTINCT day FROM schedule WHERE user_id IS NULL "
+                                      f"AND doctor_id={doctor_id} AND year={year} AND month={month}")]
+        if not days:
+            bot.answer_callback_query(callback_query_id=call.id,
+                                      text=f'К сожалению все места на {MONTH[month][1].capitalize()} уже заняты')
+            call.data = ':'.join([doctor_id, year])
+            select_month(call)
         btns = [InlineKeyboardButton(text=WEEKDAY[index][0], callback_data='pass') for index in range(7)]
-        btns += [pass_btn for _ in range(date(year=year, month=month, day=min(days)).weekday())]
-        for day in range(monthrange(year, month)[1]):
-            if day in days:
+        btns += [pass_btn for _ in range(date(year=year, month=month, day=1).weekday())]
+        for day in range(1, monthrange(year, month)[1] + 1):
+            if day in days and day >= dt.now().day:
                 btns.append(
                     InlineKeyboardButton(
                         text=str(day),
-                        callback_data=f'selected_day:{doctor_id}:{year}:{month}:{day}'))
+                        callback_data=f'selected_day:{doctor_id}:{year}:{month}:{day}:0'))
             else:
                 btns.append(pass_btn)
-        btns += [pass_btn for _ in range(len(btns) % 7 + 1)]
+        btns += [pass_btn for _ in range(len(btns) % 7)]
         select_day_menu = Menu(
             buttons=btns,
             **MENUS['select_day_menu']['params']
@@ -252,6 +295,7 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_day:'))
     def select_time(call):
+        now = dt.now()
         if call.data.count(':') == 5:
             doctor_id, year, month, day, page = [int(i) if i.isnumeric() else i
                                                  for i in call.data.split(':')[1:]]
@@ -261,9 +305,14 @@ def main():
                                            for i in call.data.split(':')[1:]]
         times = [(time(int(elem[0]), int(elem[1])), time(int(elem[2]), int(elem[3])), int(elem[4]))
                  for elem in edit_db(f"SELECT hour_start, minute_start, hour_end, minute_end, id FROM schedule WHERE "
-                                     f"user_id IS NULL AND year={year} AND month={month} AND day={day} "
-                                     f"AND doctor_id={doctor_id}")]
+                                     f"user_id IS NULL AND doctor_id={doctor_id} "
+                                     f"AND year={year} AND month={month} AND day={day}")]
         times.sort(key=lambda elem: elem[0])
+        if not times:
+            bot.answer_callback_query(callback_query_id=call.id,
+                                      text=f'К сожалению все места на {MONTH[month][1].capitalize()} {day} уже заняты')
+            call.data = ':'.join([doctor_id, year, month])
+            select_day(call)
         select_time_menu = Menu(
             buttons=[
                 InlineKeyboardButton(text=f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')}",
@@ -280,12 +329,13 @@ def main():
     def put_user_phone(msg, cell_id):
         phone = msg.text
         email = None
-        edit_db(f"""INSERT INTO users (id, username, first_name, last_name, email, phone) VALUES (?, ?, ?, ?, ?, ?)""",
+        edit_db(f"INSERT INTO users (id, username, first_name, last_name, email, phone) "
+                f"VALUES (?, ?, ?, ?, ?, ?)",
                 values=(
                     msg.from_user.id, msg.from_user.username, msg.from_user.first_name, msg.from_user.last_name, email,
                     phone))
         write_log(msg.from_user, f'Зарегистрировался в базе данных')
-        edit_db(f"""UPDATE schedule SET user_id={msg.from_user.id} WHERE id={cell_id}""")
+        edit_db(f"UPDATE schedule SET user_id={msg.from_user.id} WHERE id={cell_id}")
         markup = ReplyKeyboardRemove()
         data = [int(i) if str(i).isnumeric() else str(i) for i in
                 edit_db(f"""SELECT title, last_name, first_name, middle_name, year, month, day, hour_start, minute_start, 
@@ -365,7 +415,7 @@ def main():
                                        f"{time(apt[9], apt[10]).strftime('%H:%M')}\n"
                                        f"Ваш номерок на прием: {apt[11]}-{apt[12]}",
                                   show_alert=True)
-        write_log(call.deom_user, f'Посмотрел свою запись с id {appointment_id}')
+        write_log(call.from_user, f'Посмотрел свою запись с id {appointment_id}')
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('delete_appointment_menu:'))
     def show_delete_appointment_menu(call):
@@ -393,7 +443,7 @@ def main():
         write_log(call.from_user, f'Посмотрел свои записи чтобы удалить')
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('delete_appointment:'))
-    def show_appointment(call):
+    def delete_appointment(call):
         appointment_id = int(call.data.split(':')[1])
         apt = [int(i) if str(i).isnumeric() else str(i) for i in
                edit_db(f"SELECT title, doctors.last_name, doctors.last_name, doctors.middle_name, year, month, day, "
@@ -409,8 +459,8 @@ def main():
                                        f"{time(apt[9], apt[10]).strftime('%H:%M')}",
                                   show_alert=True)
         write_log(call.from_user, f'Убрал запись с id {appointment_id}')
-        if not edit_db(f"SELECT * FROM shcedule WHERE id={appointment_id}"):
-            call.data = 'start_menu'
+        if not edit_db(f"SELECT * FROM schedule WHERE user_id={call.from_user.id}"):
+            main_menu(call)
         call.data = 'delete_appointment_menu:0'
         show_delete_appointment_menu(call)
 
@@ -418,14 +468,32 @@ def main():
     def redirect_to_instruction(call):
         show_instruction(call=call)
 
-    start_writing_log()
     bot.polling(none_stop=True)
-    stop_writing_log()
 
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception as error:
-        traceback.print_exc()
-        traceback.print_exc(file=open('error_info.txt', mode='w', encoding='utf-8'))
+    if os.path.isfile(path('error_info.txt')):
+        with open(path('error_info.txt'), mode='w', encoding='utf=8') as file:
+            file.write(f'{dt.now()} - Запуск')
+    start_writing_log()
+    if ALWAYS_RESTART:
+        while True:
+            try:
+                main()
+            except telebot_error as error:
+                traceback.print_exc()
+                write_log(message='Перезапуск бота')
+                tm.sleep(1)
+            except Exception as error:
+                traceback.print_exc()
+                traceback.print_exc(file=open('error_info.txt', mode='w', encoding='utf-8'))
+            finally:
+                stop_writing_log()
+    else:
+        try:
+            main()
+        except Exception as error:
+            traceback.print_exc()
+            traceback.print_exc(file=open('error_info.txt', mode='w', encoding='utf-8'))
+        finally:
+            stop_writing_log()

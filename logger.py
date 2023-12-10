@@ -87,18 +87,18 @@ def start_writing_log():
           file=open(path('log.txt'), mode='a+', encoding='utf-8'))
 
 
-def write_log(user: User,
+def write_log(user: User = None,
               message: str = 'DEBUG',
               only_str: bool = False,
-              sep: str = '\n'):
-    if only_str:
-        print(f'{dt.now()}: {message}{sep}', file=open(path()))
-        print(f'{dt.now()}: {message}{sep}')
+              ending: str = '\n'):
+    if (not user and message) or only_str:
+        print(f'{dt.now()}: {message}', end=ending, file=open(path()))
+        print(f'{dt.now()}: {message}', end=ending)
         return
     print(f'{dt.now()}: Пользователь - {user.username}: {user.id} '
-          f'({user.first_name} {user.last_name}) *** {message}{sep}')
+          f'({user.first_name} {user.last_name}) *** {message}', end=ending)
     print(f'{dt.now()}: Пользователь - {user.username}: {user.id} '
-          f'({user.first_name} {user.last_name}) *** {message}{sep}',
+          f'({user.first_name} {user.last_name}) *** {message}', end=ending,
           file=open(path(), mode='a+', encoding='utf-8'))
 
 

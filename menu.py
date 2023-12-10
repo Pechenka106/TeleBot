@@ -52,9 +52,9 @@ def create_buttons(buttons: list[InlineKeyboardButton] = None,
     if not ((page < 0 and abs(page) <= n_rows) or (0 <= page < n_rows)):
         raise IndexError('Index of page list out range')
     if row_size < 1:
-        raise Exception('Кол-во столбцов не может быть меньше 1')
+        raise Exception('Count columns dont be < 1')
     if elem_on_page < row_size:
-        raise Exception('Размер ряда не может превышать размер страницы')
+        raise Exception('row_size dont be > elem_on_page')
     # print(f'n_rows: {n_rows}')
     # print(buttons)
     if is_flip:

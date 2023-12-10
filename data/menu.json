@@ -5,7 +5,7 @@
     {
       "text": "Главное меню",
       "row_size": 1,
-      "elem_on_page": 25,
+      "elem_on_page": 5,
       "is_flip": false,
       "is_close_menu_btn": true,
       "is_main_menu_btn": false,
@@ -19,7 +19,7 @@
       "create_appointment":
       {
         "text": "Записаться на приём",
-        "callback_data": "create_appointment_menu"
+        "callback_data": "create_appointment_menu:0"
       },
 
 
