@@ -2,8 +2,8 @@
 log.txt
 token.txt
 test.py
-TeleBot.7z
-app.spec
+*.7z
+*.spec
 error_info.txt
 !/dist/
 !/build/

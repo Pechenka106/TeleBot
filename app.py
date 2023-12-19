@@ -4,7 +4,7 @@ import traceback
 from sys import argv
 from datetime import *
 from calendar import monthrange
-from telebot.apihelper import ApiTelegramException as telebot_error
+from telebot.apihelper import ApiTelegramException as Telebot_errors
 
 from menu import *
 
@@ -149,14 +149,14 @@ def main():
         try:
             bot.delete_message(call.message.chat.id, call.message.id)
             write_log(call.from_user, f'Закрыл меню с помощью кнопки \"Закрыть\"')
-        except telebot_error as error:
+        except Telebot_errors as error:
             bot.answer_callback_query(callback_query_id=call.id)
             write_log(call.from_user, f'Невозможно закрыть меню с помощью кнопки \"Закрыть\"\n{error}"')
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('create_appointment_menu'))
     def select_category_of_doctor(call):
+        now = dt.now().strftime(f'%y%m%d%H%M')
         page = int(call.data.split(':')[1])
-        now = dt.now()
         data = edit_db(f'SELECT * FROM categories')
         if not data:
             bot.answer_callback_query(callback_query_id=call.id,
@@ -164,7 +164,8 @@ def main():
             write_log(call.from_user, f'Пытался записаться на прием, но не было найдено врачей в клинике')
             return
         if not [i for i in
-                edit_db(f"SELECT * FROM schedule WHERE user_id IS NULL")]:
+                edit_db(f"SELECT * FROM schedule WHERE user_id IS NULL")
+                if int(''.join(map(str, i[1:6]))) >= int(now)]:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению все места заняты')
             write_log(call.from_user, f'Пытался записаться на прием, но все места были заняты')
@@ -181,11 +182,12 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_category:'))
     def select_doctor(call):
-        now = dt.now()
+        now = dt.now().strftime(f'%y%m%d%H%M')
         category_id, page = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]]
         category = edit_db(f"SELECT title FROM categories WHERE id={category_id}")[0][0]
-        if not edit_db(f"SELECT DISTINCT * FROM schedule, doctors WHERE user_id IS NULL "
-                       f"AND schedule.doctor_id=doctors.id AND doctors.category_id={category_id}"):
+        if not [i[:10] for i in edit_db(f"SELECT * FROM schedule, doctors WHERE user_id IS NULL "
+                                        f"AND schedule.doctor_id=doctors.id AND doctors.category_id={category_id}")
+                if int(''.join(map(str, i[1:6]))) >= int(now)]:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению, у нас отсутствуют свободные места у '
                                            f'{category}')
@@ -212,10 +214,12 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_doctor:'))
     def select_year(call):
-        now = dt.now()
+        now = dt.now().strftime(f'%y%m%d%H%M')
         doctor_id, page = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]]
-        years = [i[0] for i in
-                 edit_db(f"SELECT DISTINCT year FROM schedule WHERE user_id IS NULL AND doctor_id={doctor_id}")]
+        years = [i[1] for i in
+                 edit_db(f"SELECT * FROM schedule WHERE user_id IS NULL AND doctor_id={doctor_id}")
+                 if int(''.join(map(str, i[1:6]))) >= int(now)]
+        years = sorted(set(years))
         doctor = edit_db(f"SELECT categories.title, doctors.last_name, doctors.first_name FROM doctors, categories "
                          f"WHERE doctors.id={doctor_id} AND categories.id=doctors.category_id")[0]
         if not years:
@@ -240,19 +244,21 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_year:'))
     def select_month(call):
-        now = dt.now()
+        now = dt.now().strftime(f'%y%m%d%H%M')
         doctor_id, year = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]]
         btns = []
-        months = [i[0] for i in
-                  edit_db(f"SELECT DISTINCT month FROM schedule WHERE user_id IS NULL AND doctor_id={doctor_id} "
-                          f"AND year={year}")]
+        months = [i[2] for i in
+                  edit_db(f"SELECT * FROM schedule WHERE user_id IS NULL AND doctor_id={doctor_id} "
+                          f"AND year={year}")
+                  if int(''.join(map(str, i[1:6]))) >= int(now)]
+        months = sorted(set(months))
         if not months:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению все места на {2000 + year} год заняты')
             call.data = ':'.join([doctor_id])
             select_year(call)
         for month in range(1, 13):
-            if month in months and month >= dt.now().month:
+            if month in months:
                 btns.append(
                     InlineKeyboardButton(text=f'{MONTH[month][0]}',
                                          callback_data=f'selected_month:{doctor_id}:{year}:{month}'))
@@ -266,11 +272,13 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_month:'))
     def select_day(call):
-        now = dt.now()
+        now = dt.now().strftime(f'%y%m%d%H%M')
         doctor_id, year, month = [int(i) if i.isnumeric() else i for i in call.data.split(':')[1:]]
         pass_btn = InlineKeyboardButton(text=' ', callback_data='pass')
-        days = [i[0] for i in edit_db(f"SELECT DISTINCT day FROM schedule WHERE user_id IS NULL "
-                                      f"AND doctor_id={doctor_id} AND year={year} AND month={month}")]
+        days = [i[3] for i in edit_db(f"SELECT * FROM schedule WHERE user_id IS NULL "
+                                      f"AND doctor_id={doctor_id} AND year={year} AND month={month}")
+                if int(''.join(map(str, i[1:6]))) >= int(now)]
+        days = sorted(set(days))
         if not days:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению все места на {MONTH[month][1].capitalize()} уже заняты')
@@ -279,7 +287,7 @@ def main():
         btns = [InlineKeyboardButton(text=WEEKDAY[index][0], callback_data='pass') for index in range(7)]
         btns += [pass_btn for _ in range(date(year=year, month=month, day=1).weekday())]
         for day in range(1, monthrange(year, month)[1] + 1):
-            if day in days and day >= dt.now().day:
+            if day in days:
                 btns.append(
                     InlineKeyboardButton(
                         text=str(day),
@@ -295,7 +303,7 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('selected_day:'))
     def select_time(call):
-        now = dt.now()
+        now = dt.now().strftime(f'%y%m%d%H%M')
         if call.data.count(':') == 5:
             doctor_id, year, month, day, page = [int(i) if i.isnumeric() else i
                                                  for i in call.data.split(':')[1:]]
@@ -303,11 +311,13 @@ def main():
             page = 0
             doctor_id, year, month, day = [int(i) if i.isnumeric() else i
                                            for i in call.data.split(':')[1:]]
-        times = [(time(int(elem[0]), int(elem[1])), time(int(elem[2]), int(elem[3])), int(elem[4]))
-                 for elem in edit_db(f"SELECT hour_start, minute_start, hour_end, minute_end, id FROM schedule WHERE "
-                                     f"user_id IS NULL AND doctor_id={doctor_id} "
-                                     f"AND year={year} AND month={month} AND day={day}")]
+        times = [(time(int(i[4]), int(i[5])), time(int(i[6]), int(i[7])), int(i[0]))
+                 for i in edit_db(f"SELECT * FROM schedule WHERE "
+                                  f"user_id IS NULL AND doctor_id={doctor_id} "
+                                  f"AND year={year} AND month={month} AND day={day}")
+                 if int(''.join(map(str, i[1:6]))) >= int(now)]
         times.sort(key=lambda elem: elem[0])
+        print(times)
         if not times:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению все места на {MONTH[month][1].capitalize()} {day} уже заняты')
@@ -338,8 +348,9 @@ def main():
         edit_db(f"UPDATE schedule SET user_id={msg.from_user.id} WHERE id={cell_id}")
         markup = ReplyKeyboardRemove()
         data = [int(i) if str(i).isnumeric() else str(i) for i in
-                edit_db(f"""SELECT title, last_name, first_name, middle_name, year, month, day, hour_start, minute_start, 
-                hour_end, minute_end FROM categories, doctors, schedule WHERE categories.id=doctors.category_id 
+                edit_db(f"""SELECT title, last_name, first_name, middle_name, year, month, day, hour_start, 
+                minute_start, hour_end, minute_end FROM categories, doctors, schedule 
+                WHERE categories.id=doctors.category_id 
                 AND doctors.id=schedule.doctor_id AND schedule.id={cell_id}""")[0]]
         text = f"{data[0]} - {' '.join([data[1], data[2], data[3]])} на " \
                f"{date(data[4] + 2000, data[5], data[6])} в {time(data[7], data[8]).strftime('%H:%M')}-" \
@@ -352,7 +363,10 @@ def main():
     def accept_appointment(call):
         cell_id = int(call.data.split(':')[-1])
         user = edit_db(f"""SELECT id FROM users WHERE id={call.from_user.id}""")
-        bot.delete_message(call.message.chat.id, call.message.id)
+        try:
+            bot.delete_message(call.message.chat.id, call.message.id)
+        except Telebot_errors as error:
+            write_log(user=call.from_user, message=f'Невозможно закрыть {error}')
         if not user:
             markup = ReplyKeyboardMarkup()
             markup.add(KeyboardButton(text='Поделиться номером телефона', request_contact=True))
@@ -363,9 +377,10 @@ def main():
         edit_db(f"""UPDATE schedule SET user_id={call.from_user.id} WHERE id={cell_id}""")
         markup = ReplyKeyboardRemove()
         data = [int(i) if str(i).isnumeric() else str(i) for i in
-                edit_db(f"""SELECT title, last_name, first_name, middle_name, year, month, day, hour_start, minute_start, 
-                hour_end, minute_end FROM categories, doctors, schedule WHERE categories.id=doctors.category_id 
-                AND doctors.id=schedule.doctor_id AND schedule.id={cell_id}""")[0]]
+                edit_db(f"""SELECT title, last_name, first_name, middle_name, year, month, day, hour_start, 
+                minute_start, hour_end, minute_end FROM categories, doctors, schedule 
+                WHERE categories.id=doctors.category_id AND doctors.id=schedule.doctor_id 
+                AND schedule.id={cell_id}""")[0]]
         text = f"{data[0]} - {' '.join([data[1], data[2], data[3]])} на " \
                f"{date(data[4] + 2000, data[5], data[6])} в {time(data[7], data[8]).strftime('%H:%M')}-" \
                f"{time(data[9], data[10]).strftime('%H:%M')}"
@@ -376,12 +391,14 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('show_appointment_menu:'))
     def show_appointment_menu(call):
+        now = dt.now().strftime(f'%y%m%d%H%M')
         page = int(call.data.split(':')[1])
         appointments = [[int(i) if str(i).isnumeric() else str(i) for i in appointment] for appointment in
                         edit_db(f"SELECT schedule.id, title, last_name, first_name, middle_name, year, month, day,"
                                 f"hour_start, minute_start, hour_end, minute_end FROM categories, doctors, schedule "
                                 f"WHERE doctors.category_id=categories.id AND doctors.id=schedule.doctor_id "
-                                f"AND schedule.user_id={call.from_user.id}")]
+                                f"AND schedule.user_id={call.from_user.id}")
+                        if int(''.join(map(str, appointment[5:10]))) >= int(now)]
         if not appointments:
             bot.answer_callback_query(callback_query_id=call.id, text=f'У вас отсутствуют записи к врачам')
             return
@@ -419,12 +436,14 @@ def main():
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('delete_appointment_menu:'))
     def show_delete_appointment_menu(call):
+        now = dt.now().strftime(f'%y%m%d%H%M')
         page = int(call.data.split(':')[1])
         appointments = [[int(i) if str(i).isnumeric() else str(i) for i in appointment] for appointment in
                         edit_db(f"SELECT schedule.id, title, last_name, first_name, middle_name, year, month, day,"
                                 f"hour_start, minute_start, hour_end, minute_end FROM categories, doctors, schedule "
                                 f"WHERE doctors.category_id=categories.id AND doctors.id=schedule.doctor_id "
-                                f"AND schedule.user_id={call.from_user.id}")]
+                                f"AND schedule.user_id={call.from_user.id}")
+                        if int(''.join(map(str, appointment[5:10]))) >= int(now)]
         if not appointments:
             bot.answer_callback_query(callback_query_id=call.id, text=f'У вас отсутствуют записи к врачам')
             return
@@ -480,7 +499,7 @@ if __name__ == '__main__':
         while True:
             try:
                 main()
-            except telebot_error as error:
+            except Telebot_errors as error:
                 traceback.print_exc()
                 write_log(message='Перезапуск бота')
                 tm.sleep(1)

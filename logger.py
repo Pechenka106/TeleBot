@@ -6,7 +6,6 @@ from pathlib import Path
 import time as tm
 from typing import *
 
-
 DIR_PATH = Path.cwd()
 
 
@@ -16,6 +15,7 @@ def show_time_complete(func):
         func(*args, **kwargs)
         end_time = tm.time()
         print(f'function {func.__name__} completed in {end_time - start_time} second')
+
     return decorated
 
 
@@ -38,7 +38,7 @@ def edit_db(command: str,
         except Exception as error:
             print(command + '\n' + str(error))
             if not create_database:
-                return None
+                return []
             cur.execute(f"""CREATE TABLE doctors (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
                         last_name   TEXT    NOT NULL,
                         first_name  TEXT    NOT NULL,
@@ -63,8 +63,8 @@ def edit_db(command: str,
             cur.execute(f"""CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,
                         title TEXT UNIQUE NOT NULL);""")
             db.commit()
-            return None
-    return data
+            return []
+    return [] if data is None else data
 
 
 def start_writing_log():
