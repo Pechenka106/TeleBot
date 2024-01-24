@@ -103,6 +103,6 @@ def write_log(user: User = None,
 
 
 def stop_writing_log():
-    print(f'{dt.now()}: Завершение работы\n----------------\n')
-    print(f'{dt.now()}: Завершение работы\n----------------\n',
+    print(f'\n{dt.now()}: Завершение работы\n----------------\n')
+    print(f'\n{dt.now()}: Завершение работы\n----------------\n',
           file=open(path('log.txt'), mode='a+', encoding='utf-8'))

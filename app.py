@@ -85,14 +85,19 @@ def main():
 
     @bot.message_handler(commands=['start'])
     def welcome(msg=None, call=None):
+        last_name = ''
         if call:
-            username = call.from_user.first_name
+            first_name = call.from_user.first_name
+            if call.from_user.last_name:
+                last_name = call.from_user.last_name
         else:
-            username = msg.from_user.first_name
+            first_name = msg.from_user.first_name
+            if msg.from_user.last_name:
+                last_name = msg.from_user.last_name
         start_menu = Menu(**MENUS['welcome']['params'],
-                          text=f'Привет <b>{username}</b>!\n'
-                               f'Записаться на примем ты можешь через главное меню по кнопке внизу либо написав '
-                               f'команду - /menu')
+                          text=f'Здравствуйте, <b>{"".join([last_name, first_name])}</b>!\n'
+                               f'Записаться на прием Вы можете через главное меню по <b>кнопке</b> внизу, либо написав '
+                               f'команду - <b>/menu</b>')
         if msg:
             bot.send_message(msg.chat.id, **start_menu.render())
             write_log(msg.from_user, f'Вызвал приветствие')
@@ -103,10 +108,10 @@ def main():
     @bot.message_handler(commands=['help'])
     def show_instruction(msg=None, call=None):
         help_menu = Menu(**MENUS['show_instruction']['params'],
-                         text=f'Для открытия меню введите /menu или нажмите на кнопку \"Главное меню\"\n'
-                              f'Чтобы записаться на прием к врачу выберите пункт \"Записаться на прием\"\n'
-                              f'Чтобы посмотреть свои записи к врачам выберите пункт \"Посмотреть мои записи\"\n'
-                              f'Чтобы отменить запись на прием выберите пункт \"Убрать запись\"')
+                         text=f'Для открытия меню введите <b>/menu</b> или нажмите на кнопку <b>\"Главное меню\"</b>\n'
+                              f'Чтобы записаться на прием к врачу выберите пункт <b>\"Записаться на прием\"</b>\n'
+                              f'Чтобы посмотреть свои записи к врачам выберите пункт <b>\"Посмотреть мои записи\"</b>\n'
+                              f'Чтобы отменить запись на прием выберите пункт <b>\"Убрать запись\"</b>')
         if msg:
             bot.send_message(msg.chat.id, **help_menu.render())
             write_log(msg.from_user, f'Посмотрел список команд с помощью \"/help\"')
@@ -225,7 +230,11 @@ def main():
         if not years:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению все места к {doctor[0]}: {doctor[1]} {doctor[2]} уже заняты')
-            main_menu(call)
+            write_log(call.from_user, f'Пытался выбрать врача с id {doctor_id}, но все места были заняты')
+            # category_id = edit_db(f'SELECT category_id FROM doctors WHERE id={doctor_id}')[0][0]
+            # call.data = f'selected_category:{category_id}:0'
+            # select_doctor(call)
+            return
         if len(years) == 1:
             call.data = f'selected_year:{doctor_id}:{years[0]}'
             select_month(call)
@@ -255,8 +264,11 @@ def main():
         if not months:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению все места на {2000 + year} год заняты')
-            call.data = ':'.join([doctor_id])
-            select_year(call)
+            write_log(call.from_user, f'Пытался выбрать время у врача с id {doctor_id} на {2000 + year}, '
+                                      f'но все места были заняты')
+            # call.data = ':'.join([doctor_id])
+            # select_year(call)
+            return
         for month in range(1, 13):
             if month in months:
                 btns.append(
@@ -282,8 +294,11 @@ def main():
         if not days:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению все места на {MONTH[month][1].capitalize()} уже заняты')
-            call.data = ':'.join([doctor_id, year])
-            select_month(call)
+            write_log(call.from_user, f'Пытался выбрать время у врача с id {doctor_id} на {2000 + year}-{month}'
+                                      f', но все места были заняты')
+            # call.data = ':'.join([doctor_id, year])
+            # select_month(call)
+            return
         btns = [InlineKeyboardButton(text=WEEKDAY[index][0], callback_data='pass') for index in range(7)]
         btns += [pass_btn for _ in range(date(year=year, month=month, day=1).weekday())]
         for day in range(1, monthrange(year, month)[1] + 1):
@@ -317,12 +332,14 @@ def main():
                                   f"AND year={year} AND month={month} AND day={day}")
                  if int(''.join(map(str, i[1:6]))) >= int(now)]
         times.sort(key=lambda elem: elem[0])
-        print(times)
         if not times:
             bot.answer_callback_query(callback_query_id=call.id,
                                       text=f'К сожалению все места на {MONTH[month][1].capitalize()} {day} уже заняты')
-            call.data = ':'.join([doctor_id, year, month])
-            select_day(call)
+            write_log(call.from_user, f'Пытался выбрать время у врача с id {doctor_id} на {2000 + year}-{month}'
+                                      f'-{day}, но все места были заняты')
+            # call.data = ':'.join([doctor_id, year, month])
+            # select_day(call)
+            return
         select_time_menu = Menu(
             buttons=[
                 InlineKeyboardButton(text=f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')}",
@@ -353,7 +370,9 @@ def main():
                 WHERE categories.id=doctors.category_id 
                 AND doctors.id=schedule.doctor_id AND schedule.id={cell_id}""")[0]]
         text = f"{data[0]} - {' '.join([data[1], data[2], data[3]])} на " \
-               f"{date(data[4] + 2000, data[5], data[6])} в {time(data[7], data[8]).strftime('%H:%M')}-" \
+               f"{date(data[4] + 2000, data[5], data[6])} " \
+               f"({WEEKDAY[date(data[4] + 2000, data[5], data[6]).weekday()][0].capitalize()}) в " \
+               f"{time(data[7], data[8]).strftime('%H:%M')}-" \
                f"{time(data[9], data[10]).strftime('%H:%M')}"
         bot.send_message(msg.chat.id, f"Вы успешно записались к {text}",
                          reply_markup=markup)
@@ -367,6 +386,19 @@ def main():
             bot.delete_message(call.message.chat.id, call.message.id)
         except Telebot_errors as error:
             write_log(user=call.from_user, message=f'Невозможно закрыть {error}')
+        cell = edit_db(f'SELECT * FROM schedule WHERE id={cell_id}')[0]
+        if not cell:
+            year, month, day, time_start, time_end, doctor_id = \
+                (cell[1], cell[2], cell[3], time(hour=cell[4], minute=cell[5]), time(hour=cell[6], minute=cell[7]),
+                 cell[8])
+            bot.answer_callback_query(
+                callback_query_id=call.id,
+                text=f'К сожалению все места на {MONTH[month][1].capitalize()} '
+                     f'{day}:{time_start.strftime("%H%M")}-{time_end.strftime("%H%M")} уже заняты')
+            write_log(call.from_user,
+                      f'Пытался выбрать время у врача с id {doctor_id} на {2000 + year}-{month}-{day}:'
+                      f'{time_start.strftime("%H%M")}-{time_end.strftime("%H%M")}, но все места были заняты')
+            return
         if not user:
             markup = ReplyKeyboardMarkup()
             markup.add(KeyboardButton(text='Поделиться номером телефона', request_contact=True))
@@ -382,7 +414,9 @@ def main():
                 WHERE categories.id=doctors.category_id AND doctors.id=schedule.doctor_id 
                 AND schedule.id={cell_id}""")[0]]
         text = f"{data[0]} - {' '.join([data[1], data[2], data[3]])} на " \
-               f"{date(data[4] + 2000, data[5], data[6])} в {time(data[7], data[8]).strftime('%H:%M')}-" \
+               f"{date(data[4] + 2000, data[5], data[6])} " \
+               f"({WEEKDAY[date(data[4] + 2000, data[5], data[6]).weekday()][0].capitalize()}) в " \
+               f"{time(data[7], data[8]).strftime('%H:%M')}-" \
                f"{time(data[9], data[10]).strftime('%H:%M')}"
         bot.send_message(call.message.chat.id,
                          f"Вы успешно записались к {text}",
@@ -425,10 +459,12 @@ def main():
                        f"FROM categories, doctors, schedule, users WHERE doctors.category_id=categories.id "
                        f"AND doctors.id=schedule.doctor_id "
                        f"AND users.id=schedule.user_id AND schedule.id={appointment_id}")[0]]
+        year, month, day = edit_db(f'SELECT year, month, day FROM schedule WHERE id={appointment_id}')[0]
         bot.answer_callback_query(callback_query_id=call.id,
                                   text=f"Вы записаны к {apt[0]} - {' '.join((apt[1], apt[2], apt[3]))} на "
-                                       f"{MONTH[apt[5]][0].capitalize()} {apt[6]} в "
-                                       f"{time(apt[7], apt[8]).strftime('%H:%M')}-"
+                                       f"{MONTH[apt[5]][1].capitalize()} {apt[6]} "
+                                       f"({WEEKDAY[date(year=year, month=month, day=day).weekday()][0].capitalize()}) в"
+                                       f" {time(apt[7], apt[8]).strftime('%H:%M')}-"
                                        f"{time(apt[9], apt[10]).strftime('%H:%M')}\n"
                                        f"Ваш номерок на прием: {apt[11]}-{apt[12]}",
                                   show_alert=True)
